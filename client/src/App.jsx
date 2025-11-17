@@ -11,8 +11,12 @@ function App() {
   // State to hold the text of the new task we are typing
   const [newTaskText, setNewTaskText] = useState("");
 
+  // --- NEW: State to track which task is "thinking" ---
+  // We'll store the ID of the task we're generating
+  const [loadingTaskId, setLoadingTaskId] = useState(null);
+  // --- END NEW ---
+
   // This `useEffect` hook runs once when the app loads
-  // It's the perfect place to fetch our data
   useEffect(() => {
     fetchTasks();
   }, []);
@@ -21,7 +25,7 @@ function App() {
   const fetchTasks = async () => {
     try {
       const response = await axios.get(API_URL);
-      setTasks(response.data); // Put the tasks from the API into our state
+      setTasks(response.data); 
     } catch (error) {
       console.error("Error fetching tasks:", error);
     }
@@ -29,22 +33,35 @@ function App() {
 
   // Function to create a new task
   const handleCreateTask = async (e) => {
-    // Prevent the form from refreshing the page on submit
     e.preventDefault();
-    if (!newTaskText) return; // Don't create empty tasks
+    if (!newTaskText) return; 
 
     try {
       const taskToCreate = { text: newTaskText };
-      // Make the POST request to our server
       const response = await axios.post(API_URL, taskToCreate);
-      
-      // Add the new task (from the server response) to our UI
       setTasks([...tasks, response.data]);
-      
-      // Clear the input box
       setNewTaskText("");
     } catch (error) {
       console.error("Error creating task:", error);
+    }
+  };
+
+  const handleGenerateSubtasks = async (taskId) => {
+    setLoadingTaskId(taskId); // Show the "loading" spinner
+    try {
+      // Call our new AI endpoint on the server
+      const response = await axios.post(`${API_URL}/${taskId}/generate-subtasks`);
+      
+      // The server sends back the *updated* task.
+      // We need to find the old task in our list and replace it.
+      setTasks(currentTasks =>
+        currentTasks.map(t => (t._id === taskId ? response.data : t))
+      );
+
+    } catch (error) {
+      console.error("Error generating sub-tasks:", error);
+    } finally {
+      setLoadingTaskId(null); // Stop the "loading" spinner
     }
   };
 
@@ -52,24 +69,46 @@ function App() {
     <div className="app-container">
       <h1>AI Task Manager</h1>
       
-      {/* Form for creating a new task */}
       <form className="task-form" onSubmit={handleCreateTask}>
         <input 
           type="text" 
           value={newTaskText}
           onChange={(e) => setNewTaskText(e.target.value)}
-          placeholder="Enter a new task..."
+          placeholder="Enter a new complex task..."
         />
         <button type="submit">Add Task</button>
       </form>
       
-      {/* List of current tasks */}
       <div className="task-list">
         {tasks.length > 0 ? (
           tasks.map(task => (
-            // We use task._id (from MongoDB) as the unique key
             <div key={task._id} className="task-item">
-              <p>{task.text}</p>
+              
+              {/* --- NEW: Task Item Header --- */}
+              <div className="task-item-header">
+                <p>{task.text}</p>
+                <button 
+                  className="generate-btn"
+                  // Call the AI function when clicked
+                  onClick={() => handleGenerateSubtasks(task._id)}
+                  // Disable the button if this task is already loading
+                  disabled={loadingTaskId === task._id}
+                >
+                  {/* Show "Generating..." if loading */}
+                  {loadingTaskId === task._id ? "Generating..." : "Generate Sub-tasks"}
+                </button>
+              </div>
+
+              {task.subTasks && task.subTasks.length > 0 && (
+                <ul className="subtask-list">
+                  {task.subTasks.map((subTask, index) => (
+                    <li key={index}>
+                      {subTask.text}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
             </div>
           ))
         ) : (

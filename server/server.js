@@ -1,23 +1,36 @@
 // --- Imports ---
 const express = require('express');
 const cors = require('cors');
-require('dotenv').config(); // This loads our .env variables
+require('dotenv').config();
+const mongoose = require('mongoose'); // --- NEW ---
 
 // --- App Setup ---
 const app = express();
-const PORT = process.env.PORT || 5001; // Use port 5001 as a fallback
+const PORT = process.env.PORT || 5001;
 
 // --- Middleware ---
-// These functions run on every request
-app.use(cors()); // Allows your React app to make requests to this server
-app.use(express.json()); // Allows the server to understand incoming JSON data
+app.use(cors());
+app.use(express.json());
+
+// --- Database Connection --- NEW ---
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => {
+    console.log("Successfully connected to MongoDB Atlas!");
+
+    // --- Start The Server (ONLY after DB connection is successful) --- NEW ---
+    app.listen(PORT, () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+
+  })
+  .catch((err) => {
+    console.error("Error connecting to MongoDB:", err);
+  });
+// --- END NEW ---
 
 // --- Routes (Our API Endpoints) ---
 app.get('/api', (req, res) => {
   res.json({ message: "Hello from the server! 👋" });
 });
 
-// --- Start The Server ---
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+// --- We moved the app.listen() inside the mongoose.connect() block ---

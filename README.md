@@ -1,4 +1,6 @@
 # AI-Powered MERN Task Manager
+**Live Demo:** [**https://your-vercel-url-goes-here.vercel.app**](https://ai-task-manager-teal.vercel.app/)
+
 
 > **Note on My Development Process:**
 >

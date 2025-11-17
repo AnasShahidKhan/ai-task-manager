@@ -5,7 +5,7 @@ import Sidebar from './components/Sidebar';
 import CalendarPanel from './components/CalendarPanel';
 import TaskList from './components/TaskList';
 
-const API_URL = 'http://localhost:5001/api/tasks';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api/tasks';
 
 function App() {
   const [selectedDate, setSelectedDate] = useState(new Date());

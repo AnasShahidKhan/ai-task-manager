@@ -1,26 +1,21 @@
 const express = require('express');
 const router = express.Router();
 const Task = require('../models/Task');
-const { startOfDay, endOfDay } = require('date-fns'); // --- NEW: For date queries
+const { startOfDay, endOfDay } = require('date-fns');
 
-// --- NEW: Import and set up the Google Gemini AI ---
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-// Initialize the AI with your API key
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-preview-09-2025" });
-// --- END NEW ---
 
 
 // --- FULL CRUD API ---
-
 // GET /api/tasks/by-date/:date
-// This is our NEW "Read" route for the calendar
 router.get('/by-date/:date', async (req, res) => {
   try {
     const date = new Date(req.params.date);
-    const start = startOfDay(date); // e.g., 2025-11-17 00:00:00
-    const end = endOfDay(date);     // e.g., 2025-11-17 23:59:59
+    const start = startOfDay(date); 
+    const end = endOfDay(date);     
 
     const tasks = await Task.find({
       dueDate: {
@@ -38,7 +33,7 @@ router.get('/by-date/:date', async (req, res) => {
 router.post('/', async (req, res) => {
   const task = new Task({
     text: req.body.text,
-    dueDate: new Date(req.body.dueDate) // --- UPDATED ---
+    dueDate: new Date(req.body.dueDate)
   });
 
   try {
@@ -55,7 +50,7 @@ router.put('/:id', async (req, res) => {
     const updatedTask = await Task.findByIdAndUpdate(
       req.params.id,
       req.body,
-      { new: true } // This returns the *new*, updated document
+      { new: true }
     );
     if (!updatedTask) return res.status(404).json({ message: 'Task not found' });
     res.json(updatedTask);
@@ -76,8 +71,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 // --- AI ENDPOINTS ---
-
-// POST /api/tasks/:id/generate-subtasks (Your existing feature)
+// POST /api/tasks/:id/generate-subtasks
 router.post('/:id/generate-subtasks', async (req, res) => {
   try {
     const task = await Task.findById(req.params.id);
@@ -95,12 +89,19 @@ router.post('/:id/generate-subtasks', async (req, res) => {
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
+    const rawText = response.text();
+
     let subTaskArray;
 
     try {
-      subTaskArray = JSON.parse(response.text());
+      const jsonMatch = rawText.match(/\[[\s\S]*\]/);
+      if (!jsonMatch) {
+        throw new Error("AI returned plain text, not a JSON array");
+      }
+      const jsonString = jsonMatch[0];
+      subTaskArray = JSON.parse(jsonString);
     } catch (e) {
-      console.error("Error parsing AI response:", e);
+      console.error("Error parsing AI response:", rawText, e);
       return res.status(500).json({ message: "AI returned invalid data" });
     }
 
@@ -120,27 +121,35 @@ router.post('/chat-to-task', async (req, res) => {
   const today = new Date().toISOString();
 
   const prompt = `
-    You are an intelligent task parser. Today's date is ${today}.
-    Convert the user's prompt into a JSON object with "text" and "dueDate".
-    The "dueDate" MUST be a valid ISO 8601 date string.
+    You are an AI assistant for a task manager app. Today's date is ${today}.
+    First, determine the user's "intent": "chatting", "creating_task", or "unsupported_request".
 
-    Rules:
-    - If no date is mentioned, use today's date.
-    - If "tomorrow" is mentioned, calculate tomorrow's date.
-    - If a day of the week is mentioned (e.g., "this Friday"), calculate the upcoming Friday.
-    - Be smart about times (e.g., "tomorrow at 10am").
+    - "chatting": If the user is just talking (e.g., "Hi", "How are you?").
+    - "creating_task": If the user is giving a command to create a task (e.g., "Add milk", "Call bank tomorrow").
+    - "unsupported_request": If the user is asking to DO something you can't, like delete, update, or read a task (e.g., "delete my last task", "what's on my list?", "change my task").
 
-    IMPORTANT: Respond *only* with the single, valid JSON object. Do not include any other text or markdown.
+    You MUST respond with *only* a valid JSON object in one of these three formats.
+    Do NOT include any other text, markdown, or explanations. Do NOT be conversational if the type is 'unsupported_request'.
 
-    Examples:
-    User: "Call the bank tomorrow at 10am"
-    Your Response: {"text": "Call the bank", "dueDate": "2025-11-18T10:00:00.000Z"}
-    
-    User: "Finish the report"
-    Your Response: {"text": "Finish the report", "dueDate": "${today}"}
-    
-    User: "Submit project this Friday"
-    Your Response: {"text": "Submit project", "dueDate": "2025-11-21T17:00:00.000Z"}
+    Format 1 (Chat):
+    {
+      "type": "chat",
+      "response": "Hello! How can I help you today?"
+    }
+
+    Format 2 (Task):
+    {
+      "type": "task",
+      "task": {
+        "text": "Call the bank",
+        "dueDate": "2025-11-18T10:00:00.000Z"
+      }
+    }
+
+    Format 3 (Unsupported):
+    {
+      "type": "unsupported_request"
+    }
 
     Now, parse this prompt:
     User: "${userPrompt}"
@@ -150,16 +159,43 @@ router.post('/chat-to-task', async (req, res) => {
   try {
     const result = await model.generateContent(prompt);
     const response = await result.response;
-    const aiResponse = JSON.parse(response.text());
+    const rawText = response.text();
 
-    // Create the new task using the AI's response
-    const task = new Task({
-      text: aiResponse.text,
-      dueDate: new Date(aiResponse.dueDate)
-    });
+    let aiResponse;
 
-    const newTask = await task.save();
-    res.status(201).json(newTask); // Send the new task back to the client
+    try {
+      const jsonMatch = rawText.match(/{[\s\S]*}/);
+      if (!jsonMatch) {
+        // The AI just sent plain chat (e.g., "Hello")
+        throw new Error("AI returned plain text, not JSON");
+      }
+      const jsonString = jsonMatch[0];
+      aiResponse = JSON.parse(jsonString);
+    } catch (e) {
+      // If parsing fails, treat it as a basic chat response
+      console.warn("AI returned non-JSON, treating as chat:", rawText);
+      aiResponse = {
+        type: "chat",
+        response: rawText.replace(/```json|```/g, "")
+      };
+    }
+
+
+    if (aiResponse.type === 'task' && aiResponse.task) {
+      // It's a task. Save it to the database.
+      const task = new Task({
+        text: aiResponse.task.text,
+        dueDate: new Date(aiResponse.task.dueDate)
+      });
+      const newTask = await task.save();
+      res.status(201).json({ type: 'task', task: newTask });
+
+    } else if (aiResponse.type === 'unsupported_request') {
+      res.status(200).json({ type: 'chat', response: "Sorry, I can only add new tasks and chat. I can't delete or modify tasks." });
+
+    } else {
+      res.status(200).json({ type: 'chat', response: aiResponse.response });
+    }
 
   } catch (err) {
     console.error("Error with AI chat-to-task:", err);

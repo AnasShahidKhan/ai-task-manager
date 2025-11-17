@@ -1,59 +1,84 @@
-/* --- Basic Reset & Font --- */
+/*Global Setup & Fonts*/
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  background-color: #242424;
+
+  color-scheme: light dark;
   color: rgba(255, 255, 255, 0.87);
+  background-color: #242424;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
   margin: 0;
-  display: flex;
-  justify-content: center;
   min-width: 320px;
   min-height: 100vh;
-  padding-top: 5vh;
 }
 
-/* --- App Container --- */
-.app-container {
-  width: 100%;
-  max-width: 600px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
-}
-
-h1 {
-  font-size: 2.5em;
-  line-height: 1.1;
-  margin-bottom: 2rem;
-}
-
-/* --- Form Styling --- */
-.task-form {
+/*Main App 2-Column Layout*/
+.app-layout {
   display: flex;
-  gap: 10px;
-  margin-bottom: 2rem;
+  height: 100vh;
+  width: 100vw;
 }
 
-.task-form input[type="text"] {
+.sidebar {
+  width: 350px;
+  background-color: #1a1a1a;
+  padding: 1.5rem;
+  border-right: 1px solid #3a3a3a;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  overflow-y: auto;
+}
+
+.main-panel {
   flex-grow: 1;
+  padding: 1.5rem;
+  overflow-y: auto;
+}
+
+/*Sidebar Components (Add Task & AI Chat)*/
+.form-container, .ai-supporter {
+  background-color: #242424;
+  padding: 1rem;
+  border-radius: 8px;
+}
+
+.form-container h2, .ai-supporter h2 {
+  margin-top: 0;
+  color: #646cff;
+}
+
+.form-container form, .ai-supporter form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+input[type="text"], textarea {
+  width: 100%;
   padding: 0.8em 1.2em;
   font-size: 1em;
   border-radius: 8px;
-  border: 1px solid transparent;
+  border: 1px solid #3a3a3a;
   background-color: #1a1a1a;
   color: #fff;
-  transition: border-color 0.25s;
-}
-.task-form input[type="text"]:focus {
-  border-color: #646cff;
-  outline: none;
+  box-sizing: border-box;
 }
 
-.task-form button {
+textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+button {
   padding: 0.8em 1.2em;
   font-size: 1em;
   font-weight: 500;
@@ -62,26 +87,51 @@ h1 {
   background-color: #646cff;
   color: #fff;
   cursor: pointer;
-  transition: border-color 0.25s;
+  transition: all 0.25s;
 }
-.task-form button:hover {
-  border-color: #4349c2;
+button:hover {
+  background-color: #535bf2;
 }
-
-/* --- Task List --- */
-.task-list {
-  display: flex;
-  flex-direction: column;
-  gap: 15px; /* Increased gap */
+button:disabled {
+  background-color: #555;
+  cursor: not-allowed;
 }
 
+
+/*Main Panel (Calendar & Task List)*/
+.react-calendar {
+  width: 100% !important;
+  border: 1px solid #3a3a3a !important;
+  background-color: #1a1a1a !important;
+  border-radius: 8px;
+}
+.react-calendar__tile, .react-calendar__navigation button {
+  color: #fff !important;
+}
+.react-calendar__tile:hover {
+  background-color: #2a2a2a !important;
+}
+.react-calendar__tile--now {
+  background-color: #242424 !important;
+}
+.react-calendar__tile--active {
+  background-color: #646cff !important;
+}
+
+.task-list-container {
+  margin-top: 2rem;
+}
+.task-list-container h2 {
+  color: #646cff;
+}
+
+/*TaskItem Component Styling*/
 .task-item {
   background-color: #1a1a1a;
-  padding: 1.5em; /* Increased padding */
+  padding: 1rem 1.5rem;
   border-radius: 8px;
-  text-align: left;
-  display: flex;
-  flex-direction: column; /* --- NEW --- */
+  margin-bottom: 1rem;
+  border: 1px solid #3a3a3a;
 }
 
 .task-item-header {
@@ -90,44 +140,116 @@ h1 {
   align-items: center;
   gap: 15px;
 }
-
 .task-item-header p {
   margin: 0;
   font-size: 1.1em;
-  font-weight: 500; /* Bolder task text */
+  font-weight: 500;
   flex-grow: 1;
+  cursor: pointer;
+}
+.task-item-header p.completed {
+  text-decoration: line-through;
+  opacity: 0.5;
 }
 
-.generate-btn {
-  padding: 0.5em 1em;
-  font-size: 0.9em;
+.task-item-buttons {
+  display: flex;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.task-btn {
+  padding: 0.4em 0.8em;
+  font-size: 0.85em;
   font-weight: 500;
-  border-radius: 8px;
-  border: 1px solid #646cff;
-  background-color: transparent;
-  color: #646cff;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background-color: #4a4a4a;
+  color: #fff;
   cursor: pointer;
   transition: all 0.25s;
-  white-space: nowrap; /* Prevents text wrap */
 }
-.generate-btn:hover {
-  background-color: rgba(100, 108, 255, 0.1);
+.task-btn.generate-btn {
+  background-color: transparent;
+  border-color: #646cff;
+  color: #646cff;
 }
-.generate-btn:disabled {
-  border-color: #555;
-  color: #555;
+.task-btn.delete-btn {
+  background-color: transparent;
+  border-color: #ff4d4d;
+  color: #ff4d4d;
+}
+.task-btn:disabled {
+  background-color: #555;
   cursor: not-allowed;
 }
 
+/*Sub-task List*/
 .subtask-list {
   padding-left: 20px;
   margin-top: 15px;
   margin-bottom: 0;
   border-left: 2px solid #646cff;
+  list-style-type: none;
 }
-
 .subtask-list li {
   font-size: 0.95em;
   color: rgba(255, 255, 255, 0.7);
-  margin-bottom: 5px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.subtask-list input[type="checkbox"] {
+  cursor: pointer;
+}
+.subtask-list li.completed {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+/*AI Chat window Styles */
+.ai-supporter {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-window {
+  flex-grow: 1;
+  background-color: #1a1a1a;
+  border: 1px solid #3a3a3a;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 10px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chat-message {
+  padding: 0.5rem 1rem;
+  border-radius: 12px;
+  max-width: 80%;
+}
+
+.chat-message.ai {
+  background-color: #3a3a3a;
+  color: #fff;
+  align-self: flex-start;
+}
+
+.chat-message.user {
+  background-color: #646cff;
+  color: #fff;
+  align-self: flex-end;
+}
+
+.chat-message p {
+  margin: 0;
+}
+
+.ai-supporter form {
+  flex-shrink: 0;
 }

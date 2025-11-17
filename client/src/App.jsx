@@ -1,120 +1,129 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { format } from 'date-fns';
+import Sidebar from './components/Sidebar';
+import CalendarPanel from './components/CalendarPanel';
+import TaskList from './components/TaskList';
 
-// Define the URL of our backend server
 const API_URL = 'http://localhost:5001/api/tasks';
 
 function App() {
-  // State to hold the list of tasks from the database
+  const [selectedDate, setSelectedDate] = useState(new Date());
   const [tasks, setTasks] = useState([]);
-  
-  // State to hold the text of the new task we are typing
-  const [newTaskText, setNewTaskText] = useState("");
 
-  // --- NEW: State to track which task is "thinking" ---
-  // We'll store the ID of the task we're generating
-  const [loadingTaskId, setLoadingTaskId] = useState(null);
-  // --- END NEW ---
-
-  // This `useEffect` hook runs once when the app loads
+  // --- Data Fetching ---
+  // This will re-run every time the 'selectedDate' changes
   useEffect(() => {
-    fetchTasks();
-  }, []);
+    fetchTasksForDate(selectedDate);
+  }, [selectedDate]);
 
-  // Function to fetch all tasks from our server
-  const fetchTasks = async () => {
+  const fetchTasksForDate = async (date) => {
     try {
-      const response = await axios.get(API_URL);
-      setTasks(response.data); 
+      const dateString = format(date, 'yyyy-MM-dd');
+      const response = await axios.get(`${API_URL}/by-date/${dateString}`);
+      setTasks(response.data);
     } catch (error) {
       console.error("Error fetching tasks:", error);
     }
   };
 
-  // Function to create a new task
-  const handleCreateTask = async (e) => {
-    e.preventDefault();
-    if (!newTaskText) return; 
+  // --- Task CRUD Handlers ---
+  // These functions are passed down to the components
+  
+  const handleTaskCreated = (taskDate) => {
+    // This is a simple way to refresh the list
+    // If the new task was for today, refresh our list.
+    if (format(new Date(taskDate), 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd')) {
+      fetchTasksForDate(selectedDate);
+    } else {
+      // If the task was for a *different* day, just select that day
+      setSelectedDate(new Date(taskDate));
+    }
+  };
 
+  const handleToggleComplete = async (taskId, isCompleted) => {
     try {
-      const taskToCreate = { text: newTaskText };
-      const response = await axios.post(API_URL, taskToCreate);
-      setTasks([...tasks, response.data]);
-      setNewTaskText("");
+      const response = await axios.put(`${API_URL}/${taskId}`, { isCompleted });
+      // Find and replace the task in our local list
+      setTasks(currentTasks => 
+        currentTasks.map(t => (t._id === taskId ? response.data : t))
+      );
     } catch (error) {
-      console.error("Error creating task:", error);
+      console.error("Error updating task:", error);
+    }
+  };
+
+  const handleDelete = async (taskId) => {
+    try {
+      await axios.delete(`${API_URL}/${taskId}`);
+      // Filter out the deleted task from our local list
+      setTasks(currentTasks => currentTasks.filter(t => t._id !== taskId));
+    } catch (error) {
+      console.error("Error deleting task:", error);
     }
   };
 
   const handleGenerateSubtasks = async (taskId) => {
-    setLoadingTaskId(taskId); // Show the "loading" spinner
     try {
-      // Call our new AI endpoint on the server
       const response = await axios.post(`${API_URL}/${taskId}/generate-subtasks`);
-      
-      // The server sends back the *updated* task.
-      // We need to find the old task in our list and replace it.
-      setTasks(currentTasks =>
+      // Find and replace the task to show its new subtasks
+      setTasks(currentTasks => 
         currentTasks.map(t => (t._id === taskId ? response.data : t))
       );
-
     } catch (error) {
       console.error("Error generating sub-tasks:", error);
-    } finally {
-      setLoadingTaskId(null); // Stop the "loading" spinner
     }
   };
 
+  const handleToggleSubtask = async (taskId, subTaskIndex, isCompleted) => {
+    // 1. Find the task
+    const taskToUpdate = tasks.find(t => t._id === taskId);
+    if (!taskToUpdate) return;
+  
+    // 2. Create a deep copy of the subtasks array
+    const newSubTasks = [...taskToUpdate.subTasks];
+    // 3. Update the specific subtask
+    newSubTasks[subTaskIndex] = { ...newSubTasks[subTaskIndex], isCompleted };
+  
+    // 4. Call the API to update the entire task
+    try {
+      const response = await axios.put(`${API_URL}/${taskId}`, { 
+        subTasks: newSubTasks 
+      });
+      // 5. Update our local state
+      setTasks(currentTasks => 
+        currentTasks.map(t => (t._id === taskId ? response.data : t))
+      );
+    } catch (error) {
+      console.error("Error updating sub-task:", error);
+    }
+  };
+
+
+  // --- Render the App ---
   return (
-    <div className="app-container">
-      <h1>AI Task Manager</h1>
+    <div className="app-layout">
       
-      <form className="task-form" onSubmit={handleCreateTask}>
-        <input 
-          type="text" 
-          value={newTaskText}
-          onChange={(e) => setNewTaskText(e.target.value)}
-          placeholder="Enter a new complex task..."
+      <Sidebar 
+        selectedDate={selectedDate}
+        onTaskCreated={handleTaskCreated}
+      />
+      
+      <main className="main-panel">
+        <CalendarPanel 
+          selectedDate={selectedDate}
+          onDateChange={setSelectedDate}
         />
-        <button type="submit">Add Task</button>
-      </form>
-      
-      <div className="task-list">
-        {tasks.length > 0 ? (
-          tasks.map(task => (
-            <div key={task._id} className="task-item">
-              
-              {/* --- NEW: Task Item Header --- */}
-              <div className="task-item-header">
-                <p>{task.text}</p>
-                <button 
-                  className="generate-btn"
-                  // Call the AI function when clicked
-                  onClick={() => handleGenerateSubtasks(task._id)}
-                  // Disable the button if this task is already loading
-                  disabled={loadingTaskId === task._id}
-                >
-                  {/* Show "Generating..." if loading */}
-                  {loadingTaskId === task._id ? "Generating..." : "Generate Sub-tasks"}
-                </button>
-              </div>
+        <TaskList
+          tasks={tasks}
+          selectedDate={selectedDate}
+          onToggleComplete={handleToggleComplete}
+          onDelete={handleDelete}
+          onGenerateSubtasks={handleGenerateSubtasks}
+          onToggleSubtask={handleToggleSubtask}
+        />
+      </main>
 
-              {task.subTasks && task.subTasks.length > 0 && (
-                <ul className="subtask-list">
-                  {task.subTasks.map((subTask, index) => (
-                    <li key={index}>
-                      {subTask.text}
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-            </div>
-          ))
-        ) : (
-          <p>No tasks yet. Add one!</p>
-        )}
-      </div>
     </div>
   );
 }
